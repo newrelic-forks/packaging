@@ -2,6 +2,17 @@
 set -e
 export PATH=$PATH:/usr/local/bin/
 
+# Fiddling with the prompt string only works with bash,
+# which on ubuntu is not the default /bin/sh
+# The invoker may choose to run bash -x to help debug this script
+if [ "${PS1}" = "" ] ; then
+  #
+  # be really fussy with non interactive shell
+  #
+  PS4='+${BASH_SOURCE}:${LINENO}: '  # trace source and line
+fi
+set -u
+
 if [ "$#" -le 2 ]; then
     echo "$0 DISTRO_NAME RELEASE VERSION [SOURCE_DIR] [PACKAGE_DIR] [BUILD_DIR] [DEV_PACKAGE_DIR]"
     echo "  for example, stable:"
@@ -51,7 +62,7 @@ if [ "$NIGHTLY" = true ]; then
     PACKAGE_VERSION=$NIGHTLY_DATE~$RELEASE
 else
     GIT_TARGET=HHVM-$HHVM_VERSION
-    PACKAGE_VERSION=`echo $VERSION | sed -E 's/-(dbg|dev)$//'`~$RELEASE
+    PACKAGE_VERSION=`echo $VERSION | sed --regexp-extended -e 's/-(rel|dbg|dev)$//' -e 's/ \((rel|dbg|dev)\)$//'`~$RELEASE
     case $STABLE_VERSION in
         3.3 | 3.6)
             echo "You are using the wrong branch of the packaging script."
@@ -59,15 +70,22 @@ else
             ;;
     esac
 fi
-if [ `echo $VERSION | grep '.*-dev$'` ]; then
+if echo $VERSION | grep '.*-dev$' ; then
     DEVONLY=true
-    VERSION=`echo $VERSION | sed s/-dev$//`
+    VERSION=`echo $VERSION | sed --regexp-extended -e 's/-(rel|dbg|dev)$//' -e 's/ \((rel|dbg|dev)\)$//'`
     echo "Dev only, Debug off"
 fi
-if [ `echo $VERSION | grep '.*-dbg$'` ]; then
+
+if echo $VERSION | grep '.*-dbg$' ; then
     DEBUG=true
-    VERSION=`echo $VERSION | sed s/-dbg$//`
+    VERSION=`echo $VERSION | sed --regexp-extended -e 's/-(rel|dbg|dev)$//' -e 's/ \((rel|dbg|dev)\)$//'`
     echo "Debug"
+fi
+
+if echo $VERSION | grep '.*-rel$' ; then
+    DEBUG=false
+    VERSION=`echo $VERSION | sed --regexp-extended -e 's/-(rel|dbg|dev)$//' -e 's/ \((rel|dbg|dev)\)$//'`
+    echo "Release"
 fi
 
 if [ -z "$BUILD" -o ! -d "$BUILD" ]; then
@@ -167,8 +185,13 @@ if [ ! -f $BUILD/usr/bin/hphpize ]; then
     fi
 fi
 
-echo "Checking version"
-$SOURCE/hphp/hhvm/hhvm --version | grep -q $HHVM_VERSION
+if [ -z "${NON_FACEBOOK:-}" ] ; then
+  # Facebook releases expect to hae matching version numbers
+  echo "Checking version"
+  $SOURCE/hphp/hhvm/hhvm --version | grep -q $HHVM_VERSION
+else
+  echo "HHVM version is: $($SOURCE/hphp/hhvm/hhvm --version)"
+fi
 
 if [ -z "$PACKAGE" -o ! -d "$PACKAGE" ]; then
     PACKAGE=`mktemp -d`
@@ -234,8 +257,24 @@ if [ ! -d $PACKAGE/root ]; then
     echo "finished creating hhvm package contents"
 fi
 
-fakeroot -i $FAKEROOT dpkg -b $PACKAGE/root/ hhvm_${PACKAGE_VERSION}_amd64.deb
-dpkg-sig -k 452A652F --sign builder $PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb
+fakeroot -i "$FAKEROOT" dpkg -b "$PACKAGE/root/" "hhvm_${PACKAGE_VERSION}_amd64.deb"
+
+if [ -n "${NON_FACEBOOK:-}" ] ; then
+  if [ -n "${NON_FACEBOOK_SIG:-}" ] ; then
+    dpkg-sig -k "${NON_FACEBOOK_SIG}" --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+  elif [ -d ${HOME}/.gnupg ] ; then
+    dpkg-sig                          --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+  else
+    echo "Non-Facebook distribution of the package is not yet signed"
+  fi
+else
+  dpkg-sig -k 452A652F --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+fi
+
+if [ -n "${NON_FACEBOOK:-}" ] ; then
+  echo "Done with non-Facebook debian build"
+  exit 0
+fi
 
 if [ -z "$DPACKAGE" -o ! -d "$DPACKAGE" ]; then
     DPACKAGE=`mktemp -d`
