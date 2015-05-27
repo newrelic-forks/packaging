@@ -38,6 +38,8 @@ ADDITIONAL_ARGS=""
 
 DAEMON_ARGS="--config ${SYSTEM_CONFIG_FILE} \
 --config ${CONFIG_FILE} \
+--config /etc/hhvm/newrelic-hhvm.ini \
+--config /etc/hhvm/newrelic.ini \
 --user ${RUN_AS_USER} \
 --mode daemon \
 -vPidFile=${PIDFILE} \
