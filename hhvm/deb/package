@@ -175,12 +175,13 @@ if [ ! -f $SOURCE/hphp/hhvm/hhvm ]; then
     fi
 fi
 
+HPHPIZE=$BUILD/usr/local/bin/hphpize
 echo "Installing hhvm into $BUILD"
 # build the headers essentially.
-if [ ! -f $BUILD/usr/bin/hphpize ]; then
+if [ ! -f $HPHPIZE ]; then
     HPHP_HOME=$SOURCE make install DESTDIR=$BUILD
-    if [ ! -f $BUILD/usr/bin/hphpize ]; then
-        echo "$BUILD/bin/hhvm doesn't exist"
+    if [ ! -f $HPHPIZE ]; then
+        echo "$HPHPIZE doesn't exist"
         exit
     fi
 fi
@@ -261,14 +262,17 @@ fakeroot -i "$FAKEROOT" dpkg -b "$PACKAGE/root/" "hhvm_${PACKAGE_VERSION}_amd64.
 
 if [ -n "${NON_FACEBOOK:-}" ] ; then
   if [ -n "${NON_FACEBOOK_SIG:-}" ] ; then
-    dpkg-sig -k "${NON_FACEBOOK_SIG}" --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+    dpkg-sig -k "${NON_FACEBOOK_SIG}" \
+      --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
   elif [ -d ${HOME}/.gnupg ] ; then
-    dpkg-sig                          --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+    dpkg-sig   \
+      --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
   else
     echo "Non-Facebook distribution of the package is not yet signed"
   fi
 else
-  dpkg-sig -k 452A652F --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
+  dpkg-sig -k 452A652F \
+    --sign builder "$PACKAGE/hhvm_${PACKAGE_VERSION}_amd64.deb"
 fi
 
 if [ -n "${NON_FACEBOOK:-}" ] ; then
